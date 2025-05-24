@@ -32,12 +32,21 @@ pipeline {
             }
         }
 
-        // Modified stage to create ZIP and place it in the Terraform directory
         stage('Package Lambda') {
             steps {
                 sh '''
-                    # Create ZIP from the lambda directory
+                    # Create ZIP in infra directory
                     cd lambda && zip -r ../infra/lambda_function.zip .
+                '''
+            }
+        }
+
+        stage('Clean Before Terraform') {
+            steps {
+                sh '''
+                    # Clean Terraform cache and Python artifacts
+                    rm -rf infra/.terraform* infra/terraform.tfstate*
+                    rm -rf lambda/__pycache__ lambda/*.pyc
                 '''
             }
         }
@@ -45,7 +54,10 @@ pipeline {
         stage('Terraform Init') {
             steps {
                 dir('infra') {  
-                    sh 'terraform init'
+                    sh '''
+                        # Store plugins in /tmp to conserve container space
+                        terraform init -plugin-dir=/tmp/tf_plugins
+                    '''
                 }
             }
         }
@@ -60,10 +72,13 @@ pipeline {
     }
     post {
         always {
-            // Cleanup ZIP from the infra directory
-            dir('infra') {
-                sh 'rm -f lambda_function.zip'
-            }
+            sh '''
+                # Aggressive cleanup
+                rm -f infra/lambda_function.zip
+                docker system prune -af --volumes  # Clean Docker artifacts
+                rm -rf infra/.terraform* /tmp/tf_plugins
+            '''
+            cleanWs()
         }
     }
 }
