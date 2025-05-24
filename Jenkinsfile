@@ -21,6 +21,7 @@ pipeline {
             }
         }
 
+<<<<<<< HEAD
         stage('Install Terraform') {
             steps {
                 sh '''
@@ -86,4 +87,4 @@ pipeline {
             sh 'rm -rf infra/lambda_function.zip'
         }
     }
-}
+
