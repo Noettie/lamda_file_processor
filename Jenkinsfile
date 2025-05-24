@@ -5,16 +5,12 @@ pipeline {
             args '-u root -v /tmp:/tmp -e PIP_NO_CACHE_DIR=1'
         }
     }
-    tools {
-        git 'Default'  // Configure Git in Jenkins settings
-    }
     stages {
         stage('Install Dependencies') {
             steps {
                 sh '''
                     yum update -y
-                    yum install -y python3 python3-pip zip
-                    pip3 install --upgrade pip
+                    yum install -y python3 python3-pip zip  # No pip upgrade
                 '''
             }
         }
@@ -54,4 +50,3 @@ pipeline {
         }
     }
 }
-
