@@ -1,6 +1,8 @@
 pipeline {
     agent any
-
+    tools {
+        git 'Default'  // must match the name from "Global Tool Configuration"
+    }
     environment {
         AWS_REGION = 'us-east-1'
     }
