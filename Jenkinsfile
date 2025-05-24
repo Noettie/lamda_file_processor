@@ -2,8 +2,7 @@ pipeline {
     agent {
         docker {
             image 'amazonlinux:2023'
-            // Run as root and mount volumes
-            args '-u root -v /tmp:/tmp -e PIP_NO_CACHE_DIR=1 --privileged'
+            args '-u root -v /tmp:/tmp -e PIP_NO_CACHE_DIR=1 --storage-opt=size=20GB'
         }
     }
     environment {
@@ -15,12 +14,27 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 sh '''
-                    # Clean yum cache to avoid permission issues
+                    # Cleanup to maximize disk space
                     rm -rf /var/cache/yum
-                    # Install dependencies
-                    yum update -y
-                    yum install -y python3 python3-pip zip wget unzip
-                    # Install Terraform
+                    yum clean all
+
+                    # Install critical packages with minimal docs
+                    yum update -y --setopt=tsflags=nodocs
+                    yum install -y \
+                        python3 \
+                        python3-pip \
+                        zip \
+                        wget \
+                        unzip \
+                        --setopt=tsflags=nodocs \
+                        --skip-broken
+                '''
+            }
+        }
+
+        stage('Install Terraform') {
+            steps {
+                sh '''
                     TERRAFORM_VERSION="1.6.6"
                     wget https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
                     unzip -o terraform_${TERRAFORM_VERSION}_linux_amd64.zip -d /usr/local/bin/
@@ -38,26 +52,13 @@ pipeline {
 
         stage('Install Python Dependencies') {
             steps {
-                sh 'cd lambda && pip3 install -r requirements.txt -t .'
+                sh 'cd lambda && pip3 install --no-cache-dir -r requirements.txt -t .'
             }
         }
 
         stage('Package Lambda') {
             steps {
-                sh '''
-                    # Create ZIP in infra directory
-                    cd lambda && zip -r ../infra/lambda_function.zip .
-                '''
-            }
-        }
-
-        stage('Clean Before Terraform') {
-            steps {
-                sh '''
-                    # Clean Terraform cache and Python artifacts
-                    rm -rf infra/.terraform* infra/terraform.tfstate*
-                    rm -rf lambda/__pycache__ lambda/*.pyc
-                '''
+                sh 'cd lambda && zip -r ../infra/lambda_function.zip .'
             }
         }
 
@@ -80,12 +81,12 @@ pipeline {
     post {
         always {
             sh '''
-                # Cleanup
-                rm -f infra/lambda_function.zip
-                docker system prune -af --volumes
-                rm -rf infra/.terraform* /tmp/tf_plugins
+                # Cleanup workspace
+                rm -rf infra/lambda_function.zip
+                rm -rf infra/.terraform* 
             '''
             cleanWs()
         }
     }
 }
+
