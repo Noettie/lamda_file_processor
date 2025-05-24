@@ -2,13 +2,7 @@ pipeline {
     agent {
         docker {
             image 'amazonlinux:2023'
-            args '''
-                -u root 
-                -v /tmp:/tmp 
-                -v /mnt/external_storage:/workspace 
-                -e PIP_NO_CACHE_DIR=1
-                --storage-opt size=20GB
-            '''
+            args '-u root -v /tmp:/tmp -e PIP_NO_CACHE_DIR=1'
         }
     }
     environment {
@@ -20,9 +14,8 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 sh '''
-                    # Minimal package installation
                     yum update -y --skip-broken
-                    yum install -y python3 zip unzip wget
+                    yum install -y python3 python3-pip zip wget unzip
                     rm -rf /var/cache/yum
                 '''
             }
@@ -39,34 +32,50 @@ pipeline {
             }
         }
 
+        stage('Checkout Code') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Install Python Dependencies') {
+            steps {
+                sh 'cd lambda && pip3 install --no-cache-dir -r requirements.txt -t .'
+            }
+        }
+
         stage('Package Lambda') {
             steps {
-                sh '''
-                    # Build directly in /tmp to avoid filling Jenkins workspace
-                    cd lambda && zip -r /tmp/lambda_function.zip .
-                '''
+                sh 'cd lambda && zip -r ../infra/lambda_function.zip .'
+            }
+        }
+
+        stage('Terraform Init') {
+            steps {
+                dir('infra') {  
+                    sh 'terraform init'
+                }
             }
         }
 
         stage('Terraform Apply') {
             steps {
-                dir('infra') {
-                    sh '''
-                        # Store plugins externally
-                        terraform init -plugin-dir=/mnt/external_storage/tf_plugins
-                        terraform apply -auto-approve
-                    '''
+                dir('infra') {  
+                    sh 'terraform apply -auto-approve'
                 }
             }
         }
     }
     post {
         always {
-            sh '''
-                # Aggressive cleanup
-                rm -rf /tmp/lambda_function.zip
-                rm -rf .terraform*
-            '''
+            node {
+                sh '''
+                    # Cleanup inside container
+                    rm -rf infra/lambda_function.zip
+                    rm -rf infra/.terraform*
+                '''
+                cleanWs()
+            }
         }
     }
 }
