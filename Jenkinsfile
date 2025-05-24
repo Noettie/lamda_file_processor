@@ -2,7 +2,7 @@ pipeline {
     agent {
         docker {
             image 'amazonlinux:2023'
-            args '-v /tmp:/tmp -e PIP_NO_CACHE_DIR=1'
+            args '-u root -v /tmp:/tmp -e PIP_NO_CACHE_DIR=1'
         }
     }
     tools {
@@ -54,3 +54,4 @@ pipeline {
         }
     }
 }
+
