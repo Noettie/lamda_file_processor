@@ -10,7 +10,7 @@ pipeline {
             steps {
                 sh '''
                     yum update -y
-                    yum install -y python3 python3-pip zip unzip curl
+                    yum install -y python3 python3-pip zip unzip
 
                     # Install Terraform
                     TERRAFORM_VERSION="1.6.6"
