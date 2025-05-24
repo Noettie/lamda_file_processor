@@ -9,18 +9,10 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 sh '''
-                    # Update system and install base packages
                     yum update -y
                     yum install -y python3 python3-pip zip wget unzip
-
-                    # Install Terraform (avoid directory conflicts)
                     TERRAFORM_VERSION="1.6.6"
                     wget https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
-                    
-                    # Clean any existing terraform files
-                    rm -f terraform 2>/dev/null || true
-                    
-                    # Install directly to /usr/local/bin
                     unzip -o terraform_${TERRAFORM_VERSION}_linux_amd64.zip -d /usr/local/bin/
                     chmod +x /usr/local/bin/terraform
                     rm terraform_${TERRAFORM_VERSION}_linux_amd64.zip
@@ -36,10 +28,7 @@ pipeline {
 
         stage('Install Python Dependencies') {
             steps {
-                sh '''
-                    cd lambda
-                    pip3 install -r requirements.txt -t .
-                '''
+                sh 'cd lambda && pip3 install -r requirements.txt -t .'
             }
         }
 
@@ -51,7 +40,7 @@ pipeline {
 
         stage('Terraform Init') {
             steps {
-                dir('terraform') {
+                dir('infra') {  # Changed to match your directory
                     sh 'terraform init'
                 }
             }
@@ -59,7 +48,7 @@ pipeline {
 
         stage('Terraform Apply') {
             steps {
-                dir('terraform') {
+                dir('infra') {  # Changed to match your directory
                     sh 'terraform apply -auto-approve'
                 }
             }
