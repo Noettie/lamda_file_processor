@@ -20,8 +20,7 @@ pipeline {
                 '''
             }
         }
-
-<<<<<<< HEAD
+        
         stage('Install Terraform') {
             steps {
                 sh '''
