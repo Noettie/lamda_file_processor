@@ -9,37 +9,34 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 sh '''
+                    # Install system tools
                     yum update -y
-                    yum install -y python3 python3-pip zip unzip
+                    yum install -y python3 python3-pip zip wget unzip
 
-                    # Install Terraform
+                    # Install Terraform (with forced overwrite)
                     TERRAFORM_VERSION="1.6.6"
-                    curl -O https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
-                    unzip terraform_${TERRAFORM_VERSION}_linux_amd64.zip
+                    wget https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
+                    unzip -o terraform_${TERRAFORM_VERSION}_linux_amd64.zip  # -o = overwrite without prompts
                     mv terraform /usr/local/bin/
-                    terraform version
+                    rm terraform_${TERRAFORM_VERSION}_linux_amd64.zip
                 '''
             }
         }
-
         stage('Checkout Code') {
             steps {
                 checkout scm
             }
         }
-
         stage('Install Python Dependencies') {
             steps {
                 sh 'cd lambda && pip3 install -r requirements.txt -t .'
             }
         }
-
         stage('Package Lambda') {
             steps {
                 sh 'zip -r lambda_function.zip lambda/*'
             }
         }
-
         stage('Terraform Init') {
             steps {
                 dir('terraform') {
@@ -47,7 +44,6 @@ pipeline {
                 }
             }
         }
-
         stage('Terraform Apply') {
             steps {
                 dir('terraform') {
@@ -56,11 +52,9 @@ pipeline {
             }
         }
     }
-
     post {
         always {
             sh 'rm -f lambda_function.zip'
         }
     }
 }
-
