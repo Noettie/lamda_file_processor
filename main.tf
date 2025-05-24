@@ -10,7 +10,9 @@ terraform {
 provider "aws" {
   region = "us-east-1"
 }
-
+resource "random_id" "suffix" {
+  byte_length = 4
+}
 # S3 Bucket for file uploads
 resource "aws_s3_bucket" "file_uploads" {
   bucket = "file-uploads-${random_id.bucket_suffix.hex}"
@@ -47,7 +49,7 @@ resource "aws_iam_role_policy_attachment" "lambda_basic" {
 
 # S3 Access Policy
 resource "aws_iam_policy" "s3_access" {
-  name        = "lambda-s3-access"
+  name        = "lambda-s3-access-${random_id.suffix.hex}"
   description = "Policy for Lambda to access S3"
 
   policy = jsonencode({
@@ -72,10 +74,9 @@ resource "aws_iam_role_policy_attachment" "lambda_s3" {
   role       = aws_iam_role.lambda_exec.name
   policy_arn = aws_iam_policy.s3_access.arn
 }
-
 # Lambda Function (initial placeholder)
 resource "aws_lambda_function" "file_processor" {
-  function_name    = "file-processor"
+  function_name    = "file-processor-${random_id.suffix.hex}"
   role             = aws_iam_role.lambda_exec.arn
   handler          = "lambda_function.lambda_handler"  # Updated for Python
   runtime          = "python3.9"                       # or python3.8, python3.10
