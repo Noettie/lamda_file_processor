@@ -13,6 +13,14 @@ provider "aws" {
 resource "random_id" "suffix" {
   byte_length = 4
 }
+terraform {
+  backend "s3" {
+    bucket         = "your-terraform-state-bucket"  # Pre-created bucket
+    key            = "terraform.tfstate"
+    region         = "us-east-1"
+    dynamodb_table = "terraform-lock"  # For state locking
+  }
+}
 # S3 Bucket for file uploads
 resource "aws_s3_bucket" "file_uploads" {
   bucket = "file-uploads-${random_id.bucket_suffix.hex}"
