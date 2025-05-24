@@ -106,4 +106,3 @@ resource "aws_lambda_permission" "allow_bucket" {
   source_arn    = aws_s3_bucket.file_uploads.arn
 }
 
-
