@@ -2,7 +2,13 @@ pipeline {
     agent {
         docker {
             image 'amazonlinux:2023'
-            args '-u root -v /tmp:/tmp -e PIP_NO_CACHE_DIR=1 --storage-opt=size=20GB'
+            args '''
+                -u root 
+                -v /tmp:/tmp 
+                -v /mnt/external_storage:/workspace 
+                -e PIP_NO_CACHE_DIR=1
+                --storage-opt size=20GB
+            '''
         }
     }
     environment {
@@ -14,20 +20,10 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 sh '''
-                    # Cleanup to maximize disk space
+                    # Minimal package installation
+                    yum update -y --skip-broken
+                    yum install -y python3 zip unzip wget
                     rm -rf /var/cache/yum
-                    yum clean all
-
-                    # Install critical packages with minimal docs
-                    yum update -y --setopt=tsflags=nodocs
-                    yum install -y \
-                        python3 \
-                        python3-pip \
-                        zip \
-                        wget \
-                        unzip \
-                        --setopt=tsflags=nodocs \
-                        --skip-broken
                 '''
             }
         }
@@ -36,44 +32,30 @@ pipeline {
             steps {
                 sh '''
                     TERRAFORM_VERSION="1.6.6"
-                    wget https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
+                    wget -q https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
                     unzip -o terraform_${TERRAFORM_VERSION}_linux_amd64.zip -d /usr/local/bin/
-                    chmod +x /usr/local/bin/terraform
                     rm terraform_${TERRAFORM_VERSION}_linux_amd64.zip
                 '''
             }
         }
 
-        stage('Checkout Code') {
-            steps {
-                checkout scm
-            }
-        }
-
-        stage('Install Python Dependencies') {
-            steps {
-                sh 'cd lambda && pip3 install --no-cache-dir -r requirements.txt -t .'
-            }
-        }
-
         stage('Package Lambda') {
             steps {
-                sh 'cd lambda && zip -r ../infra/lambda_function.zip .'
-            }
-        }
-
-        stage('Terraform Init') {
-            steps {
-                dir('infra') {  
-                    sh 'terraform init -plugin-dir=/tmp/tf_plugins'
-                }
+                sh '''
+                    # Build directly in /tmp to avoid filling Jenkins workspace
+                    cd lambda && zip -r /tmp/lambda_function.zip .
+                '''
             }
         }
 
         stage('Terraform Apply') {
             steps {
-                dir('infra') {  
-                    sh 'terraform apply -auto-approve'
+                dir('infra') {
+                    sh '''
+                        # Store plugins externally
+                        terraform init -plugin-dir=/mnt/external_storage/tf_plugins
+                        terraform apply -auto-approve
+                    '''
                 }
             }
         }
@@ -81,12 +63,10 @@ pipeline {
     post {
         always {
             sh '''
-                # Cleanup workspace
-                rm -rf infra/lambda_function.zip
-                rm -rf infra/.terraform* 
+                # Aggressive cleanup
+                rm -rf /tmp/lambda_function.zip
+                rm -rf .terraform*
             '''
-            cleanWs()
         }
     }
 }
-
