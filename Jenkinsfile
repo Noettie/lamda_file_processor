@@ -1,17 +1,11 @@
 pipeline {
     agent {
         docker {
-            image 'amazonlinux:2'  // Use Amazon Linux 2 (supports yum)
-            args '-v /var/run/docker.sock:/var/run/docker.sock'
+            image 'amazonlinux:2023'
+            args '-u root -v /tmp:/tmp -e PIP_NO_CACHE_DIR=1'
         }
     }
-    environment {
-        AWS_ACCESS_KEY_ID     = credentials('AWS_ACCESS_KEY_ID')
-        AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
-        TF_IN_AUTOMATION     = 'true'
-    }
     stages {
-        // Stage 1: Install OS and Terraform dependencies
         stage('Install Dependencies') {
             steps {
                 sh '''
@@ -26,63 +20,51 @@ pipeline {
             }
         }
 
-        // Stage 2: Package Lambda code
+        stage('Checkout Code') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Install Python Dependencies') {
+            steps {
+                sh 'cd lambda && pip3 install -r requirements.txt -t .'
+            }
+        }
+
+        // Modified stage to create ZIP and place it in the Terraform directory
         stage('Package Lambda') {
             steps {
-                dir('python_app_lambda') {
-                    sh '''
-                        # Install Python dependencies (use pip3 for Python 3)
-                        pip3 install -r requirements.txt -t .
-
-                        # Create ZIP file
-                        zip -r lambda_function.zip lambda_function.py *.py
-                    '''
-                }
+                sh '''
+                    # Create ZIP from the lambda directory
+                    cd lambda && zip -r ../infra/lambda_function.zip .
+                '''
             }
         }
 
-        // Stage 3: Prepare Terraform directory
-        stage('Prepare Terraform') {
-            steps {
-                dir('infra') {
-                    sh 'cp ../python_app_lambda/lambda_function.zip .'
-                }
-            }
-        }
-
-        // Stage 4: Terraform Init
         stage('Terraform Init') {
             steps {
-                dir('infra') {
+                dir('infra') {  
                     sh 'terraform init'
                 }
             }
         }
 
-        // Stage 5: Terraform Apply
         stage('Terraform Apply') {
             steps {
-                dir('infra') {
+                dir('infra') {  
                     sh 'terraform apply -auto-approve'
-                }
-            }
-        }
-
-        // Stage 6: Cleanup
-        stage('Cleanup') {
-            steps {
-                dir('infra') {
-                    sh 'rm -f lambda_function.zip'
-                }
-                dir('python_app_lambda') {
-                    sh 'rm -f lambda_function.zip'
                 }
             }
         }
     }
     post {
         always {
-            cleanWs()
+            // Cleanup ZIP from the infra directory
+            dir('infra') {
+                sh 'rm -f lambda_function.zip'
+            }
         }
     }
 }
+
