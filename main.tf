@@ -77,9 +77,9 @@ resource "aws_iam_role_policy_attachment" "lambda_s3" {
 resource "aws_lambda_function" "file_processor" {
   function_name    = "file-processor"
   role             = aws_iam_role.lambda_exec.arn
-  handler          = "index.handler"
-  runtime          = "nodejs18.x"
-  filename         = "lambda_function.zip" # Will be replaced by CI/CD
+  handler          = "lambda_function.lambda_handler"  # Updated for Python
+  runtime          = "python3.9"                       # or python3.8, python3.10
+  filename         = "lambda_function.zip"
   source_code_hash = filebase64sha256("lambda_function.zip")
 
   environment {
