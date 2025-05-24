@@ -102,7 +102,7 @@ resource "aws_lambda_permission" "allow_bucket" {
   source_arn    = aws_s3_bucket.file_uploads.arn
 }
 
-# Add bucket notification configuration
+// Add bucket notification configuration
 resource "aws_s3_bucket_notification" "bucket_notification" {
   bucket = aws_s3_bucket.file_uploads.id
 
