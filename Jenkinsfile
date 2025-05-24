@@ -8,7 +8,7 @@ pipeline {
     environment {
         AWS_ACCESS_KEY_ID     = credentials('AWS_ACCESS_KEY_ID')
         AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
-        TF_IN_AUTOMATION     = 'true'
+        TF_IN_AUTOMATION      = 'true'
     }
     stages {
         // Stage 1: Install OS and Terraform dependencies
@@ -31,11 +31,17 @@ pipeline {
             steps {
                 dir('python_app_lambda') {
                     sh '''
-                        # Install Python dependencies (use pip3 for Python 3)
-                        pip3 install -r requirements.txt -t .
+                        # Clean old build
+                        rm -rf build lambda_function.zip
+                        mkdir build
 
-                        # Create ZIP file
-                        zip -r lambda_function.zip lambda_function.py *.py
+                        # Install Python dependencies and copy your function code
+                        pip3 install -r requirements.txt -t build/
+                        cp *.py build/
+
+                        # Create ZIP from build/
+                        cd build
+                        zip -r ../lambda_function.zip .
                     '''
                 }
             }
@@ -75,7 +81,10 @@ pipeline {
                     sh 'rm -f lambda_function.zip'
                 }
                 dir('python_app_lambda') {
-                    sh 'rm -f lambda_function.zip'
+                    sh '''
+                        rm -f lambda_function.zip
+                        rm -rf build
+                    '''
                 }
             }
         }
@@ -86,3 +95,4 @@ pipeline {
         }
     }
 }
+
