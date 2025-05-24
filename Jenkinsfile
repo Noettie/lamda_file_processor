@@ -11,18 +11,18 @@ provider "aws" {
   region = "us-east-1"
 }
 
-# Random IDforuniqueness
+// Random ID for uniqueness
 resource "random_id" "suffix" {
   byte_length = 8
 }
 
-# S3 Bucket forfile uploads
+// S3 Bucket forfile uploads
 resource "aws_s3_bucket" "file_uploads" {
   bucket        = "file-uploads-${random_id.suffix.hex}"
   force_destroy = true
 }
 
-# IAM Role forLambda
+// IAM Role forLambda
 resource "aws_iam_role" "lambda_exec" {
   name = "lambda-exec-role"
 
@@ -40,13 +40,13 @@ resource "aws_iam_role" "lambda_exec" {
   })
 }
 
-# Attach AWSLambdaBasicExecutionRole
+// Attach AWSLambdaBasicExecutionRole
 resource "aws_iam_role_policy_attachment" "lambda_basic" {
   role       = aws_iam_role.lambda_exec.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-# Custom policy forLambda to access S3
+// Custom policy for Lambda to access S3
 resource "aws_iam_policy" "s3_access" {
   name        = "lambda-s3-access-${random_id.suffix.hex}"
   description = "Policy for Lambda to access S3"
@@ -69,13 +69,13 @@ resource "aws_iam_policy" "s3_access" {
   })
 }
 
-# Attach custom S3 policy to Lambda role
+// Attach custom S3 policy to Lambda role
 resource "aws_iam_role_policy_attachment" "lambda_s3" {
   role       = aws_iam_role.lambda_exec.name
   policy_arn = aws_iam_policy.s3_access.arn
 }
 
-# Lambda Function
+// Lambda Function
 resource "aws_lambda_function" "file_processor" {
   function_name    = "file-processor-${random_id.suffix.hex}"
   role             = aws_iam_role.lambda_exec.arn
@@ -97,7 +97,7 @@ resource "aws_lambda_function" "file_processor" {
   ]
 }
 
-# Permission forS3 to invoke Lambda
+// Permission for S3 to invoke Lambda
 resource "aws_lambda_permission" "allow_bucket" {
   statement_id  = "AllowExecutionFromS3"
   action        = "lambda:InvokeFunction"
