@@ -40,7 +40,7 @@ pipeline {
 
         stage('Terraform Init') {
             steps {
-                dir('infra') {  # Changed to match your directory
+                dir('infra') {  
                     sh 'terraform init'
                 }
             }
@@ -48,7 +48,7 @@ pipeline {
 
         stage('Terraform Apply') {
             steps {
-                dir('infra') {  # Changed to match your directory
+                dir('infra') {  
                     sh 'terraform apply -auto-approve'
                 }
             }
