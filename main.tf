@@ -82,6 +82,10 @@ resource "aws_lambda_function" "file_processor" {
   runtime          = "python3.9"                       # or python3.8, python3.10
   filename         = "../lambda_function.zip"
   source_code_hash = filebase64sha256("../lambda_function.zip")
+  timeouts {
+    create = "10m"  # Allow up to 10 minutes for creation
+  }
+}
 
   environment {
     variables = {
