@@ -16,10 +16,8 @@ pipeline {
 
         stage('Install Python Dependencies') {
             steps {
-                sh '''
-                cd lambda
-                pip install -r requirements.txt -t .
-                '''
+                sh 'python3 -m pip install --upgrade pip'  // Explicitly use Python 3
+                sh 'cd lambda && pip3 install -r requirements.txt -t .'
             }
         }
 
