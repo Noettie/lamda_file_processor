@@ -1,77 +1,109 @@
-pipeline {
-    agent {
-        docker {
-            image 'amazonlinux:2023'
-            args '-u root -v /tmp:/tmp -e PIP_NO_CACHE_DIR=1'
-        }
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
     }
-    environment {
-        AWS_ACCESS_KEY_ID     = credentials('AWS_ACCESS_KEY_ID')
-        AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
-        TF_IN_AUTOMATION     = 'true'
-    }
-    stages {
-        stage('Install Dependencies') {
-            steps {
-                sh '''
-                    yum update -y --skip-broken
-                    yum install -y python3 python3-pip zip wget unzip
-                    rm -rf /var/cache/yum
-                '''
-            }
-        }
-
-        stage('Install Terraform') {
-            steps {
-                sh '''
-                    TERRAFORM_VERSION="1.6.6"
-                    wget -q https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
-                    unzip -o terraform_${TERRAFORM_VERSION}_linux_amd64.zip -d /usr/local/bin/
-                    rm terraform_${TERRAFORM_VERSION}_linux_amd64.zip
-                '''
-            }
-        }
-
-        stage('Checkout Code') {
-            steps {
-                checkout scm
-            }
-        }
-
-        stage('Install Python Dependencies') {
-            steps {
-                sh 'cd lambda && pip3 install --no-cache-dir -r requirements.txt -t .'
-            }
-        }
-
-        stage('Package Lambda') {
-            steps {
-                sh 'cd lambda && zip -r ../infra/lambda_function.zip .'
-            }
-        }
-
-        stage('Terraform Init') {
-            steps {
-                dir('infra') {  
-                    sh 'terraform init'
-                }
-            }
-        }
-
-        stage('Terraform Apply') {
-            steps {
-                dir('infra') {  
-                    sh 'terraform apply -auto-approve'
-                }
-            }
-        }
-    }
-    post {
-        always {
-            // Cleanup ZIP file only - DO NOT delete Terraform state
-            sh 'rm -rf infra/lambda_function.zip'
-            // Remove cleanWs() to preserve Terraform state
-        }
-    }
+  }
 }
+
+provider "aws" {
+  region = "us-east-1"
+}
+
+# Random ID for uniqueness
+resource "random_id" "suffix" {
+  byte_length = 8
+}
+
+# S3 Bucket for file uploads
+resource "aws_s3_bucket" "file_uploads" {
+  bucket        = "file-uploads-${random_id.suffix.hex}"
+  force_destroy = true
+}
+
+# IAM Role for Lambda
+resource "aws_iam_role" "lambda_exec" {
+  name = "lambda-exec-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Action = "sts:AssumeRole",
+        Effect = "Allow",
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+# Attach AWSLambdaBasicExecutionRole
+resource "aws_iam_role_policy_attachment" "lambda_basic" {
+  role       = aws_iam_role.lambda_exec.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+# Custom policy for Lambda to access S3
+resource "aws_iam_policy" "s3_access" {
+  name        = "lambda-s3-access-${random_id.suffix.hex}"
+  description = "Policy for Lambda to access S3"
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Action = [
+          "s3:GetObject",
+          "s3:ListBucket"
+        ],
+        Effect   = "Allow",
+        Resource = [
+          aws_s3_bucket.file_uploads.arn,
+          "${aws_s3_bucket.file_uploads.arn}/*"
+        ]
+      }
+    ]
+  })
+}
+
+# Attach custom S3 policy to Lambda role
+resource "aws_iam_role_policy_attachment" "lambda_s3" {
+  role       = aws_iam_role.lambda_exec.name
+  policy_arn = aws_iam_policy.s3_access.arn
+}
+
+# Lambda Function
+resource "aws_lambda_function" "file_processor" {
+  function_name    = "file-processor-${random_id.suffix.hex}"
+  role             = aws_iam_role.lambda_exec.arn
+  handler          = "lambda_function.lambda_handler"
+  runtime          = "python3.9"
+  filename         = "../lambda_function.zip"
+  source_code_hash = filebase64sha256("../lambda_function.zip")
+  timeout          = 60
+
+  environment {
+    variables = {
+      BUCKET_NAME = aws_s3_bucket.file_uploads.id
+    }
+  }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.lambda_basic,
+    aws_iam_role_policy_attachment.lambda_s3
+  ]
+}
+
+# Permission for S3 to invoke Lambda
+resource "aws_lambda_permission" "allow_bucket" {
+  statement_id  = "AllowExecutionFromS3"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.file_processor.arn
+  principal     = "s3.amazonaws.com"
+  source_arn    = aws_s3_bucket.file_uploads.arn
+}
+
 
