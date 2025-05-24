@@ -1,46 +1,47 @@
 pipeline {
     agent {
         docker {
-            image 'amazonlinux:2023'
-            args '-u root -v /tmp:/tmp -e PIP_NO_CACHE_DIR=1'
+            image 'python:3.11-slim'  // Official Python image
+            args '-v /tmp:/tmp'  // Optional volume mounts
         }
     }
+    environment {
+        AWS_DEFAULT_REGION = 'us-east-1'  // Change to your region
+    }
     stages {
-        stage('Install Dependencies') {
-            steps {
-                sh '''
-                    yum update -y
-                    yum install -y python3 python3-pip zip wget unzip
-                    TERRAFORM_VERSION="1.6.6"
-                    wget https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
-                    unzip -o terraform_${TERRAFORM_VERSION}_linux_amd64.zip -d /usr/local/bin/
-                    chmod +x /usr/local/bin/terraform
-                    rm terraform_${TERRAFORM_VERSION}_linux_amd64.zip
-                '''
-            }
-        }
-
         stage('Checkout Code') {
             steps {
-                checkout scm
+                git branch: 'main',  // Change to your branch
+                url: 'https://github.com/your-org/your-repo.git'  // Your repo URL
             }
         }
 
-        stage('Install Python Dependencies') {
+        stage('Set Up Python') {
             steps {
-                sh 'cd lambda && pip3 install -r requirements.txt -t .'
+                sh 'python --version'
+                sh 'pip install --upgrade pip'
             }
         }
 
-        stage('Package Lambda') {
+        stage('Install Dependencies') {
             steps {
-                sh 'zip -r lambda_function.zip lambda/*'
+                sh 'pip install -r requirements.txt -t lambda_function/'
+            }
+        }
+
+        stage('Create Lambda ZIP') {
+            steps {
+                sh '''
+                    echo "Creating ZIP file..."
+                    zip -r9 lambda_function.zip lambda_function/
+                    ls -al  # Verify ZIP creation
+                '''
             }
         }
 
         stage('Terraform Init') {
             steps {
-                dir('infra') {  
+                dir('infra') {  // Enter infra directory
                     sh 'terraform init'
                 }
             }
@@ -48,15 +49,21 @@ pipeline {
 
         stage('Terraform Apply') {
             steps {
-                dir('infra') {  
-                    sh 'terraform apply -auto-approve'
+                dir('infra') {  // Run from infra directory
+                    sh '''
+                        echo "Current directory: $(pwd)"
+                        ls -al ../  # Verify ZIP exists in parent directory
+                        terraform apply -auto-approve
+                    '''
                 }
             }
         }
     }
+
     post {
         always {
-            sh 'rm -f lambda_function.zip'
+            sh 'rm -f lambda_function.zip'  // Cleanup ZIP file
+            cleanWs()  // Optional workspace cleanup
         }
     }
 }
