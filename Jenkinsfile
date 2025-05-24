@@ -2,15 +2,21 @@ pipeline {
     agent {
         docker {
             image 'amazonlinux:2023'
-            args '-u root -v /tmp:/tmp -e PIP_NO_CACHE_DIR=1'
+            args '-u root -v /tmp:/tmp -e PIP_NO_CACHE_DIR=1 -v ${HOME}/.terraform.d:/root/.terraform.d'
         }
     }
     environment {
         AWS_ACCESS_KEY_ID     = credentials('AWS_ACCESS_KEY_ID')
         AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
-        TF_IN_AUTOMATION     = 'true'
+        TF_IN_AUTOMATION      = 'true'
     }
     stages {
+        stage('Checkout Code') {
+            steps {
+                checkout scm  // Should come first to get requirements.txt
+            }
+        }
+
         stage('Install Dependencies') {
             steps {
                 sh '''
@@ -28,13 +34,8 @@ pipeline {
                     wget -q https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
                     unzip -o terraform_${TERRAFORM_VERSION}_linux_amd64.zip -d /usr/local/bin/
                     rm terraform_${TERRAFORM_VERSION}_linux_amd64.zip
+                    terraform --version  # Verify installation
                 '''
-            }
-        }
-
-        stage('Checkout Code') {
-            steps {
-                checkout scm
             }
         }
 
@@ -46,14 +47,25 @@ pipeline {
 
         stage('Package Lambda') {
             steps {
-                sh 'cd lambda && zip -r ../infra/lambda_function.zip .'
+                sh '''
+                    cd lambda
+                    zip -r ../infra/lambda_function.zip . -x "*.git*" -x "*.DS_Store*"
+                '''
             }
         }
 
         stage('Terraform Init') {
             steps {
                 dir('infra') {  
-                    sh 'terraform init'
+                    sh 'terraform init -input=false'
+                }
+            }
+        }
+
+        stage('Terraform Plan') {
+            steps {
+                dir('infra') {
+                    sh 'terraform plan -out=tfplan'
                 }
             }
         }
@@ -61,29 +73,26 @@ pipeline {
         stage('Terraform Apply') {
             steps {
                 dir('infra') {  
-                    sh '''
-                    terraform apply -auto-approve <<EOF
-                    {
-                      "Version": "2012-10-17",
-                      "Statement": [
-                        {
-                          "Effect": "Allow",
-                          "Principal": {
-                            "Service": "lambda.amazonaws.com"
-                          },
-                          "Action": "sts:AssumeRole"
-                        }
-                      ]
-                    }
-                    EOF
-                    '''
+                    sh 'terraform apply -auto-approve tfplan'
                 }
             }
         }
     }
     post {
         always {
-            sh 'rm -rf infra/lambda_function.zip'
+            sh 'rm -rf infra/lambda_function.zip'  // Cleanup artifact
+            script {
+                echo "Pipeline completed - ${currentBuild.result}"
+            }
+        }
+        success {
+            slackSend(color: 'good', message: "Deployment succeeded: ${env.JOB_NAME} ${env.BUILD_NUMBER}")
+        }
+        failure {
+            dir('infra') {
+                sh 'terraform destroy -auto-approve'  // Emergency cleanup
+            }
+            slackSend(color: 'danger', message: "Deployment failed: ${env.JOB_NAME} ${env.BUILD_NUMBER}")
         }
     }
-
+}  // Closing pipeline block
