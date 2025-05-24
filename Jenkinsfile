@@ -8,7 +8,7 @@ pipeline {
     stages {
         stage('Checkout Code') {
             steps {
-                checkout scm
+                checkout scm https://github.com/nottie-noe/python_app_lambda.git
             }
         }
 
