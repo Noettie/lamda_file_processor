@@ -1,66 +1,47 @@
 pipeline {
-    agent any
+    agent {
+        docker {
+            image 'python:3.8-slim'  // Use Docker for isolation
+            args '-v /tmp:/tmp'
+        }
+    }
     tools {
-        git 'Default'  // must match the name from "Global Tool Configuration"
+        git 'Default'  // Ensure Git is configured
     }
-    environment {
-        AWS_REGION = 'us-east-1'
-    }
-
     stages {
         stage('Checkout Code') {
             steps {
-                checkout scm 
+                checkout scm
             }
         }
-
         stage('Install Python Dependencies') {
             steps {
-                sh 'python3 -m pip install --upgrade pip'  // Explicitly use Python 3
-                sh 'cd lambda && pip3 install -r requirements.txt -t .'
+                sh 'cd lambda && pip install -r requirements.txt -t .'
             }
         }
-
         stage('Package Lambda') {
             steps {
-                sh '''
-                cd lambda
-                zip -r ../lambda_function.zip .
-                '''
+                sh 'zip -r lambda_function.zip lambda/*'
             }
         }
-
         stage('Terraform Init') {
             steps {
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'AWS_CREDENTIALS',
-                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-                ]]) {
+                dir('terraform') {
                     sh 'terraform init'
                 }
             }
         }
-
         stage('Terraform Apply') {
             steps {
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'AWS_CREDENTIALS',
-                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-                ]]) {
+                dir('terraform') {
                     sh 'terraform apply -auto-approve'
                 }
             }
         }
     }
-
     post {
         always {
-            sh 'rm -f lambda_function.zip'  // Clean up
+            sh 'rm -f lambda_function.zip'
         }
     }
 }
-
