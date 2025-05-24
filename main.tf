@@ -79,8 +79,8 @@ resource "aws_lambda_function" "file_processor" {
   role             = aws_iam_role.lambda_exec.arn
   handler          = "lambda_function.lambda_handler"  # Updated for Python
   runtime          = "python3.9"                       # or python3.8, python3.10
-  filename         = "lambda_function.zip"
-  source_code_hash = filebase64sha256("lambda_function.zip")
+  filename         = "../lambda_function.zip"
+  source_code_hash = filebase64sha256("../lambda_function.zip")
 
   environment {
     variables = {
