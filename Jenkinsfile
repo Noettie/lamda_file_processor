@@ -9,34 +9,46 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 sh '''
-                    # Install system tools
+                    # Update system and install base packages
                     yum update -y
                     yum install -y python3 python3-pip zip wget unzip
 
-                    # Install Terraform (with forced overwrite)
+                    # Install Terraform (avoid directory conflicts)
                     TERRAFORM_VERSION="1.6.6"
                     wget https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
-                    unzip -o terraform_${TERRAFORM_VERSION}_linux_amd64.zip  # -o = overwrite without prompts
-                    mv terraform /usr/local/bin/
+                    
+                    # Clean any existing terraform files
+                    rm -f terraform 2>/dev/null || true
+                    
+                    # Install directly to /usr/local/bin
+                    unzip -o terraform_${TERRAFORM_VERSION}_linux_amd64.zip -d /usr/local/bin/
+                    chmod +x /usr/local/bin/terraform
                     rm terraform_${TERRAFORM_VERSION}_linux_amd64.zip
                 '''
             }
         }
+
         stage('Checkout Code') {
             steps {
                 checkout scm
             }
         }
+
         stage('Install Python Dependencies') {
             steps {
-                sh 'cd lambda && pip3 install -r requirements.txt -t .'
+                sh '''
+                    cd lambda
+                    pip3 install -r requirements.txt -t .
+                '''
             }
         }
+
         stage('Package Lambda') {
             steps {
                 sh 'zip -r lambda_function.zip lambda/*'
             }
         }
+
         stage('Terraform Init') {
             steps {
                 dir('terraform') {
@@ -44,6 +56,7 @@ pipeline {
                 }
             }
         }
+
         stage('Terraform Apply') {
             steps {
                 dir('terraform') {
