@@ -66,15 +66,12 @@ pipeline {
             }
         }
     }
+
     post {
-        always {
-            sh '''
-                # Cleanup inside container
-                rm -rf infra/lambda_function.zip
-                rm -rf infra/.terraform*
-            '''
-            cleanWs()
-        }
-    }
+  always {
+    // Only delete the ZIP file, not Terraform files
+    sh 'rm -rf infra/lambda_function.zip'
+    cleanWs()  # Preserves .terraform/ and terraform.tfstate
+  }
 }
 
