@@ -2,7 +2,7 @@ pipeline {
     agent {
         docker {
             image 'amazonlinux:2023'
-            args '-u root -v /tmp:/tmp -e PIP_NO_CACHE_DIR=1 -v ${HOME}/.terraform.d:/root/.terraform.d'
+            args '-u root -v /tmp:/tmp -e PIP_NO_CACHE_DIR=1'
         }
     }
     environment {
@@ -12,87 +12,109 @@ pipeline {
     }
     stages {
         stage('Checkout Code') {
-            steps {
-                checkout scm  // Should come first to get requirements.txt
-            }
+            steps { checkout scm }
         }
 
-        stage('Install Dependencies') {
+        stage('Install Tools') {
             steps {
                 sh '''
                     yum update -y --skip-broken
                     yum install -y python3 python3-pip zip wget unzip
+                    pip3 install pytest bandit
                     rm -rf /var/cache/yum
                 '''
             }
         }
-        
-        stage('Install Terraform') {
+
+        stage('Setup Terraform') {
             steps {
                 sh '''
                     TERRAFORM_VERSION="1.6.6"
                     wget -q https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
-                    unzip -o terraform_${TERRAFORM_VERSION}_linux_amd64.zip -d /usr/local/bin/
+                    unzip terraform_${TERRAFORM_VERSION}_linux_amd64.zip -d /usr/local/bin/
                     rm terraform_${TERRAFORM_VERSION}_linux_amd64.zip
-                    terraform --version  # Verify installation
                 '''
             }
         }
 
-        stage('Install Python Dependencies') {
-            steps {
-                sh 'cd lambda && pip3 install --no-cache-dir -r requirements.txt -t .'
-            }
-        }
-
-        stage('Package Lambda') {
+        stage('Prepare Lambda') {
             steps {
                 sh '''
                     cd lambda
-                    zip -r ../infra/lambda_function.zip . -x "*.git*" -x "*.DS_Store*"
+                    pip3 install -r requirements.txt -t .
+                    zip -r ../infra/lambda.zip .
                 '''
+            }
+        }
+
+        stage('Test Suite') {
+            parallel {
+                stage('Unit Tests') {
+                    steps {
+                        sh '''
+                            pip3 install -r tests/requirements.txt
+                            pytest tests/unit --verbose --junitxml=unit-tests.xml
+                        '''
+                    }
+                    post {
+                        always {
+                            junit 'unit-tests.xml'
+                        }
+                    }
+                }
+                stage('Security Scan') {
+                    steps { 
+                        sh 'bandit -r lambda' 
+                    }
+                }
             }
         }
 
         stage('Terraform Init') {
-            steps {
-                dir('infra') {  
-                    sh 'terraform init -input=false'
-                }
-            }
-        }
-
-        stage('Terraform Plan') {
-            steps {
-                dir('infra') {
-                    sh 'terraform plan -out=tfplan'
-                }
+            steps { 
+                dir('infra') { 
+                    sh 'terraform init' 
+                } 
             }
         }
 
         stage('Terraform Apply') {
             steps {
-                dir('infra') {  
-                    sh 'terraform apply -auto-approve tfplan'
+                dir('infra') {
+                    sh 'terraform apply -auto-approve'
+                }
+            }
+        }
+
+        stage('Verify Deployment') {
+            steps {
+                script {
+                    def api_url = sh(
+                        script: 'cd infra && terraform output -raw api_url',
+                        returnStdout: true
+                    ).trim()
+                    echo "API Endpoint: ${api_url}"
+                    sh "curl -s ${api_url}"
                 }
             }
         }
     }
+    
     post {
-        always {
-            sh 'rm -rf infra/lambda_function.zip'  // Cleanup artifact
-            script {
-                echo "Pipeline completed - ${currentBuild.result}"
+        failure {
+            dir('infra') { 
+                sh 'terraform destroy -auto-approve' 
             }
+        }
+        cleanup {
+            cleanWs()
         }
         success {
-            slackSend(color: 'good', message: "Deployment succeeded: ${env.JOB_NAME} ${env.BUILD_NUMBER}")
-        }
-        failure {
-            dir('infra') {
-                sh 'terraform destroy -auto-approve'  // Emergency cleanup
-            }
-            slackSend(color: 'danger', message: "Deployment failed: ${env.JOB_NAME} ${env.BUILD_NUMBER}")
+            emailext(
+                subject: "✅ Lambda Deployment Successful: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                body: "The Lambda function and infrastructure were deployed successfully.",
+                to: "thandonoe.ndlovu@gmail.com"
+            )
         }
     }
-}  // Closing pipeline block
+}
