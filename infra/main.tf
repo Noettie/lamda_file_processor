@@ -7,6 +7,16 @@ terraform {
   }
 }
 
+terraform {
+  backend "s3" {
+    bucket         = "petra-hs-terraform-state-bucket"
+    key            = "terraform.tfstate"
+    region         = "us-east-1"
+    use_lockfile   = true
+    encrypt        = true
+  }
+}
+
 provider "aws" {
   region = "us-east-1"
 }
