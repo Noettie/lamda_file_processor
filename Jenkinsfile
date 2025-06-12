@@ -30,7 +30,7 @@ pipeline {
                 sh '''
                     TERRAFORM_VERSION="1.6.6"
                     wget -q https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
-                    unzip terraform_${TERRAFORM_VERSION}_linux_amd64.zip -d /usr/local/bin/
+                    unzip -o terraform_${TERRAFORM_VERSION}_linux_amd64.zip -d /usr/local/bin/
                     rm terraform_${TERRAFORM_VERSION}_linux_amd64.zip
                 '''
             }
@@ -54,10 +54,18 @@ pipeline {
             }
         }
 
+        stage('Terraform Plan') {
+            steps {
+                dir('infra') {
+                    sh 'terraform plan -out=tfplan'
+                }
+            }
+        }
+
         stage('Terraform Apply') {
             steps {
                 dir('infra') {
-                    sh 'terraform apply -auto-approve'
+                    sh 'terraform apply -auto-approve tfplan'
                 }
             }
         }
@@ -80,7 +88,7 @@ pipeline {
         success {
             emailext(
                 subject: "✅ Lambda Deployment Successful: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                body: "The Lambda function and infrastructure were deployed successfully.",
+                body: "The Lambda function and infrastructure were deployed successfully.\n\nAPI URL: ${api_url}",
                 to: "thandonoe.ndlovu@gmail.com",
                 recipientProviders: [[$class: 'DevelopersRecipientProvider'], [$class: 'RequesterRecipientProvider']],
                 replyTo: 'no-reply@example.com'
@@ -90,7 +98,7 @@ pipeline {
         failure {
             emailext(
                 subject: "❌ Lambda Deployment Failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                body: "Deployment failed. Please check the logs.",
+                body: "Deployment failed. Please check the Jenkins build logs for details.",
                 to: "thandonoe.ndlovu@gmail.com"
             )
         }
@@ -100,3 +108,4 @@ pipeline {
         }
     }
 }
+

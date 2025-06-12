@@ -5,9 +5,7 @@ terraform {
       version = "~> 5.0"
     }
   }
-}
-
-terraform {
+  
   backend "s3" {
     bucket         = "petra-hs-terraform-state-bucket"
     key            = "terraform.tfstate"
@@ -26,7 +24,6 @@ data "aws_caller_identity" "current" {}
 resource "random_id" "suffix" {
   byte_length = 4
 }
-
 
 # S3 Bucket Configuration
 resource "aws_s3_bucket" "file_bucket" {
@@ -137,12 +134,12 @@ resource "aws_sns_topic" "uploads_notifications" {
 resource "aws_sns_topic_subscription" "email" {
   topic_arn = aws_sns_topic.uploads_notifications.arn
   protocol  = "email"
-  endpoint  = "thandonoe.ndlovu@gmail.com"  # replace with your actual email
+  endpoint  = "thandonoe.ndlovu@gmail.com"  # your email
 }
 
 # Lambda Function
 resource "aws_lambda_function" "file_processor" {
-  filename      = "lambda.zip" # your zip file with the lambda code
+  filename      = "lambda.zip" # your zipped Lambda code file
   function_name = "s3-file-processor"
   role          = aws_iam_role.lambda_exec.arn
   handler       = "lambda_function.lambda_handler"
@@ -168,7 +165,7 @@ resource "aws_lambda_permission" "allow_s3" {
   source_arn    = aws_s3_bucket.file_bucket.arn
 }
 
-# S3 Event Notifications - Lambda
+# S3 Bucket Notification for Lambda
 resource "aws_s3_bucket_notification" "lambda_event" {
   bucket = aws_s3_bucket.file_bucket.id
 
@@ -181,7 +178,7 @@ resource "aws_s3_bucket_notification" "lambda_event" {
   depends_on = [aws_lambda_permission.allow_s3]
 }
 
-# S3 Event Notifications - SNS
+# S3 Bucket Notification for SNS
 resource "aws_s3_bucket_notification" "sns_event" {
   bucket = aws_s3_bucket.file_bucket.id
 
@@ -192,7 +189,7 @@ resource "aws_s3_bucket_notification" "sns_event" {
   }
 }
 
-# API Gateway (Optional if you want API for Lambda invocation)
+# API Gateway setup
 resource "aws_api_gateway_rest_api" "file_api" {
   name = "file-processor-api"
 }
@@ -211,10 +208,9 @@ resource "aws_api_gateway_method" "proxy" {
 }
 
 resource "aws_api_gateway_integration" "lambda" {
-  rest_api_id = aws_api_gateway_rest_api.file_api.id
-  resource_id = aws_api_gateway_method.proxy.resource_id
-  http_method = aws_api_gateway_method.proxy.http_method
-
+  rest_api_id             = aws_api_gateway_rest_api.file_api.id
+  resource_id             = aws_api_gateway_resource.proxy.id
+  http_method             = aws_api_gateway_method.proxy.http_method
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
   uri                     = aws_lambda_function.file_processor.invoke_arn
@@ -223,14 +219,10 @@ resource "aws_api_gateway_integration" "lambda" {
 resource "aws_api_gateway_deployment" "deployment" {
   depends_on  = [aws_api_gateway_integration.lambda]
   rest_api_id = aws_api_gateway_rest_api.file_api.id
+  stage_name  = "prod"
 }
 
-resource "aws_api_gateway_stage" "prod" {
-  stage_name    = "prod"
-  rest_api_id   = aws_api_gateway_rest_api.file_api.id
-  deployment_id = aws_api_gateway_deployment.deployment.id
-}
-
+# CloudWatch Dashboard for monitoring
 resource "aws_cloudwatch_dashboard" "main" {
   dashboard_name = "LambdaFileProcessor-Dashboard"
 
@@ -278,3 +270,4 @@ variable "region" {
 output "api_url" {
   value = "https://${aws_api_gateway_rest_api.file_api.id}.execute-api.us-east-1.amazonaws.com/prod/"
 }
+
