@@ -77,20 +77,24 @@ pipeline {
     }
 
     post {
-        failure {
-            dir('infra') {
-                sh 'terraform destroy -auto-approve'
-            }
-        }
-        cleanup {
-            cleanWs()
-        }
         success {
             emailext(
                 subject: "✅ Lambda Deployment Successful: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
                 body: "The Lambda function and infrastructure were deployed successfully.",
                 to: "thandonoe.ndlovu@gmail.com"
             )
+        }
+
+        failure {
+            emailext(
+                subject: "❌ Lambda Deployment Failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                body: "Deployment failed. Please check the logs.",
+                to: "thandonoe.ndlovu@gmail.com"
+            )
+        }
+
+        cleanup {
+            cleanWs()
         }
     }
 }
