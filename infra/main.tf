@@ -12,7 +12,7 @@ terraform {
     bucket         = "petra-hs-terraform-state-bucket"
     key            = "terraform.tfstate"
     region         = "us-east-1"
-    use_lockfile   = true
+    dynamodb_table = "terraform-lock-table"
     encrypt        = true
   }
 }
