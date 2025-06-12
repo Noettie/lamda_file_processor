@@ -52,7 +52,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "auto_cleanup" {
 
 # IAM Role for Lambda
 resource "aws_iam_role" "lambda_exec" {
-  name = "lambda-exec-role"
+  name = "lambda-exec-role-${random_id.suffix.hex}"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
