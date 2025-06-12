@@ -81,7 +81,9 @@ pipeline {
             emailext(
                 subject: "✅ Lambda Deployment Successful: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
                 body: "The Lambda function and infrastructure were deployed successfully.",
-                to: "thandonoe.ndlovu@gmail.com"
+                to: "thandonoe.ndlovu@gmail.com",
+                recipientProviders: [[$class: 'DevelopersRecipientProvider'], [$class: 'RequesterRecipientProvider']],
+                replyTo: 'no-reply@example.com'
             )
         }
 
