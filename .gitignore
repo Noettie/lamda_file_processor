@@ -1,0 +1,6 @@
+.hidden_files/
+*.tfstate
+*.tfstate.backup
+.terraform/
+infra/.terraform.lock.hcl
+
