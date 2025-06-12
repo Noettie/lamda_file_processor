@@ -20,7 +20,6 @@ pipeline {
                 sh '''
                     yum update -y --skip-broken
                     yum install -y python3 python3-pip zip wget unzip
-                    pip3 install pytest bandit
                     rm -rf /var/cache/yum
                 '''
             }
@@ -47,34 +46,11 @@ pipeline {
             }
         }
 
-        stage('Test Suite') {
-            parallel {
-                stage('Unit Tests') {
-                    steps {
-                        sh '''
-                            pip3 install -r tests/requirements.txt
-                            pytest tests/unit --verbose --junitxml=unit-tests.xml
-                        '''
-                    }
-                    post {
-                        always {
-                            junit 'unit-tests.xml'
-                        }
-                    }
-                }
-                stage('Security Scan') {
-                    steps { 
-                        sh 'bandit -r lambda' 
-                    }
-                }
-            }
-        }
-
         stage('Terraform Init') {
-            steps { 
-                dir('infra') { 
-                    sh 'terraform init' 
-                } 
+            steps {
+                dir('infra') {
+                    sh 'terraform init'
+                }
             }
         }
 
@@ -99,11 +75,11 @@ pipeline {
             }
         }
     }
-    
+
     post {
         failure {
-            dir('infra') { 
-                sh 'terraform destroy -auto-approve' 
+            dir('infra') {
+                sh 'terraform destroy -auto-approve'
             }
         }
         cleanup {

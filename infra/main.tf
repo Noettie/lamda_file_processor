@@ -11,13 +11,21 @@ provider "aws" {
   region = "us-east-1"
 }
 
-# S3 Bucket for File Uploads
+data "aws_caller_identity" "current" {}
+
+resource "random_id" "suffix" {
+  byte_length = 4
+}
+
+
+# S3 Bucket Configuration
 resource "aws_s3_bucket" "file_bucket" {
   bucket = "lambda-file-processor-${random_id.suffix.hex}"
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "encrypt" {
   bucket = aws_s3_bucket.file_bucket.id
+
   rule {
     apply_server_side_encryption_by_default {
       sse_algorithm = "AES256"
@@ -25,13 +33,106 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "encrypt" {
   }
 }
 
-resource "random_id" "suffix" {
-  byte_length = 4
+resource "aws_s3_bucket_lifecycle_configuration" "auto_cleanup" {
+  bucket = aws_s3_bucket.file_bucket.id
+
+  rule {
+    id     = "delete-old-files"
+    status = "Enabled"
+
+    filter {
+      prefix = ""
+    }
+
+    expiration {
+      days = 30
+    }
+  }
+}
+
+# IAM Role for Lambda
+resource "aws_iam_role" "lambda_exec" {
+  name = "lambda-exec-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Principal = {
+        Service = "lambda.amazonaws.com"
+      }
+      Action = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_basic" {
+  role       = aws_iam_role.lambda_exec.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy" "s3_access" {
+  name = "s3-access"
+  role = aws_iam_role.lambda_exec.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "s3:GetObject",
+        "s3:PutObject"
+      ]
+      Resource = "${aws_s3_bucket.file_bucket.arn}/*"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "sns_publish" {
+  name = "sns-publish"
+  role = aws_iam_role.lambda_exec.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = "sns:Publish"
+      Resource = aws_sns_topic.uploads_notifications.arn
+    }]
+  })
+}
+
+# SNS Topic and Subscription
+resource "aws_sns_topic" "uploads_notifications" {
+  name = "s3-file-upload-notifications"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Principal = {
+        Service = "s3.amazonaws.com"
+      }
+      Action = "SNS:Publish"
+      Resource = "arn:aws:sns:us-east-1:${data.aws_caller_identity.current.account_id}:s3-file-upload-notifications"
+      Condition = {
+        ArnLike = {
+          "aws:SourceArn" = aws_s3_bucket.file_bucket.arn
+        }
+      }
+    }]
+  })
+}
+
+resource "aws_sns_topic_subscription" "email" {
+  topic_arn = aws_sns_topic.uploads_notifications.arn
+  protocol  = "email"
+  endpoint  = "thandonoe.ndlovu@gmail.com"  # replace with your actual email
 }
 
 # Lambda Function
 resource "aws_lambda_function" "file_processor" {
-  filename      = "lambda.zip"
+  filename      = "lambda.zip" # your zip file with the lambda code
   function_name = "s3-file-processor"
   role          = aws_iam_role.lambda_exec.arn
   handler       = "lambda_function.lambda_handler"
@@ -39,8 +140,8 @@ resource "aws_lambda_function" "file_processor" {
 
   environment {
     variables = {
-      S3_BUCKET      = aws_s3_bucket.file_bucket.id
-      SNS_TOPIC_ARN = os.getenv('SNS_TOPIC_ARN') # Correct reference
+      S3_BUCKET     = aws_s3_bucket.file_bucket.id
+      SNS_TOPIC_ARN = aws_sns_topic.uploads_notifications.arn
     }
   }
 
@@ -49,17 +150,39 @@ resource "aws_lambda_function" "file_processor" {
   }
 }
 
-# S3 -> Lambda Trigger
-resource "aws_s3_bucket_notification" "lambda_trigger" {
+resource "aws_lambda_permission" "allow_s3" {
+  statement_id  = "AllowS3Invoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.file_processor.function_name
+  principal     = "s3.amazonaws.com"
+  source_arn    = aws_s3_bucket.file_bucket.arn
+}
+
+# S3 Event Notifications - Lambda
+resource "aws_s3_bucket_notification" "lambda_event" {
   bucket = aws_s3_bucket.file_bucket.id
 
   lambda_function {
     lambda_function_arn = aws_lambda_function.file_processor.arn
     events              = ["s3:ObjectCreated:*"]
+    filter_prefix       = "lambda/"
+  }
+
+  depends_on = [aws_lambda_permission.allow_s3]
+}
+
+# S3 Event Notifications - SNS
+resource "aws_s3_bucket_notification" "sns_event" {
+  bucket = aws_s3_bucket.file_bucket.id
+
+  topic {
+    topic_arn    = aws_sns_topic.uploads_notifications.arn
+    events       = ["s3:ObjectCreated:*"]
+    filter_prefix = "sns/"
   }
 }
 
-# API Gateway
+# API Gateway (Optional if you want API for Lambda invocation)
 resource "aws_api_gateway_rest_api" "file_api" {
   name = "file-processor-api"
 }
@@ -88,147 +211,60 @@ resource "aws_api_gateway_integration" "lambda" {
 }
 
 resource "aws_api_gateway_deployment" "deployment" {
-  depends_on = [
-    aws_api_gateway_integration.lambda
-  ]
-
+  depends_on  = [aws_api_gateway_integration.lambda]
   rest_api_id = aws_api_gateway_rest_api.file_api.id
-  stage_name  = "prod"
 }
 
-# IAM Role for Lambda
-resource "aws_iam_role" "lambda_exec" {
-  name = "lambda-exec-role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
-      Principal = {
-        Service = "lambda.amazonaws.com"
-      }
-    }]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "lambda_basic" {
-  role       = aws_iam_role.lambda_exec.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-}
-
-resource "aws_iam_role_policy" "s3_access" {
-  name = "s3-access"
-  role = aws_iam_role.lambda_exec.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Action = [
-        "s3:GetObject",
-        "s3:PutObject"
-      ]
-      Resource = "${aws_s3_bucket.file_bucket.arn}/*"
-    }]
-  })
-}
-
-# API Gateway Permissions
-resource "aws_lambda_permission" "apigw" {
-  statement_id  = "AllowAPIGatewayInvoke"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.file_processor.function_name
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_api_gateway_rest_api.file_api.execution_arn}/*/*"
-}
-
-output "api_url" {
-  value = "${aws_api_gateway_deployment.deployment.invoke_url}/prod"
-}
-
-resource "aws_s3_bucket_lifecycle_configuration" "auto_cleanup" {
-  bucket = aws_s3_bucket.file_bucket.id
-
-  rule {
-    id     = "delete-old-files"
-    status = "Enabled"
-    expiration {
-      days = 30
-    }
-  }
-}
-
-  rule {
-    status = "Enabled"
-    destination {
-      bucket = aws_s3_bucket.eu_backup.arn
-    }
-  }
-}
-
-# Add CloudWatch permissions
-resource "aws_iam_role_policy" "cloudwatch_logs" {
-  name = "cloudwatch_logs"
-  role = aws_iam_role.lambda_exec.parent_id
-
-  policy = jsonencode({
-    Version = "2012-10-17",
-    Statement = [{
-      Effect = "Allow",
-      Action = [
-        "logs:CreateLogGroup",
-        "logs:CreateLogStream",
-        "logs:PutLogEvents"
-      ],
-      Resource = "*"
-    }]
-  })
+resource "aws_api_gateway_stage" "prod" {
+  stage_name    = "prod"
+  rest_api_id   = aws_api_gateway_rest_api.file_api.id
+  deployment_id = aws_api_gateway_deployment.deployment.id
 }
 
 resource "aws_cloudwatch_dashboard" "main" {
-  dashboard_name = "LambdaProcessor-Dashboard"
+  dashboard_name = "LambdaFileProcessor-Dashboard"
+
   dashboard_body = jsonencode({
     widgets = [
       {
-        type   = "metric"
-        x      = 0
-        y      = 0
-        width  = 12
-        height = 6
+        type = "metric",
+        x    = 0,
+        y    = 0,
+        width  = 12,
+        height = 6,
         properties = {
           metrics = [
-            ["AWS/Lambda", "Invocations", "FunctionName", "${aws_lambda_function.file_processor.function_name}"]
-          ]
-          period = 300
-          stat   = "Sum"
+            [ "AWS/Lambda", "Invocations", "FunctionName", "s3-file-processor" ],
+            [ ".", "Errors", ".", "." ],
+            [ ".", "Throttles", ".", "." ]
+          ],
+          view     = "timeSeries",
+          stacked  = false,
+          region   = "us-east-1",
+          title    = "Lambda Function: Invocations, Errors, Throttles",
+          period   = 300
+        }
+      },
+      {
+        type = "log",
+        x    = 0,
+        y    = 7,
+        width  = 24,
+        height = 6,
+        properties = {
+          query = "SOURCE '/aws/lambda/s3-file-processor'",
+          region = "us-east-1",
+          title = "Recent Lambda Logs"
         }
       }
     ]
   })
 }
 
-resource "aws_sns_topic" "uploads_notifications" {
-  name = "s3-file-upload-notifications"
+variable "region" {
+  default = "us-east-1"
 }
 
-resource "aws_s3_bucket_notification" "lambda_trigger" {
-  bucket = aws_s3_bucket.file_bucket.id
-
-  lambda_function {
-    lambda_function_arn = aws_lambda_function.file_processor.arn
-    events              = ["s3:ObjectCreated:*"]
-  }
-
-  # Add SNS notification
-  topic {
-    topic_arn = aws_sns_topic.uploads.arn
-    events    = ["s3:ObjectCreated:*"]
-  }
-}
-
-resource "aws_sns_topic_subscription" "email" {
-  topic_arn = aws_sns_topic.uploads_notifications.arn
-  protocol  = "email"
-  endpoint  = "thandonoe.ndlovu@gmail.com"  # Replace with your email
+output "api_url" {
+  value = "https://${aws_api_gateway_rest_api.file_api.id}.execute-api.us-east-1.amazonaws.com/prod/"
 }
