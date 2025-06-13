@@ -86,15 +86,6 @@ pipeline {
         }
     }
 
-    post {
-        success {
-            script {
-                slackSend(
-                    color: 'good',
-                    message: "✅ Lambda Deployment *Success* in `${env.JOB_NAME} #${env.BUILD_NUMBER}`.\nAPI: ${env.API_URL}test",
-                    channel: '#your-slack-channel' // 🔁 Update this to your real channel
-                )
-
                 emailext(
                     subject: "✅ Lambda Deployment Successful: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
                     body: """The Lambda function and infrastructure were deployed successfully.
@@ -109,15 +100,6 @@ Build: ${env.BUILD_NUMBER}
                 )
             }
         }
-
-        failure {
-            script {
-                slackSend(
-                    color: 'danger',
-                    message: "❌ Lambda Deployment *Failed* in `${env.JOB_NAME} #${env.BUILD_NUMBER}`. Check logs.",
-                    channel: '#your-slack-channel'
-                )
-
                 emailext(
                     subject: "❌ Lambda Deployment Failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
                     body: """Deployment failed for Job: ${env.JOB_NAME}
