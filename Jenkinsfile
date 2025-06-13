@@ -186,10 +186,10 @@ pipeline {
         stage('Invoke Lambda') {
             steps {
                 script {
-                    def lambda_name = sh(script: 'cd infra && terraform output -raw lambda_function_name', returnStdout: true).trim()
                     sh '''
+                        lambda_name=$(cd infra && terraform output -raw lambda_function_name)
                         payload=$(base64 -w0 lambda/test_event.json)
-                        aws lambda invoke --function-name ${lambda_name} --payload "$payload" lambda/response.json --region ${AWS_REGION}
+                        aws lambda invoke --function-name $lambda_name --payload $payload lambda/response.json --region ${AWS_REGION}
                     '''
                     sh 'cat lambda/response.json'
                 }
