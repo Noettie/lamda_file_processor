@@ -195,3 +195,94 @@ resource "aws_s3_bucket_notification" "sns_event" {
   }
 }
 
+resource "aws_api_gateway_rest_api" "file_api" {
+  name = "file-processor-api"
+}
+
+resource "aws_api_gateway_resource" "proxy" {
+  rest_api_id = aws_api_gateway_rest_api.file_api.id
+  parent_id   = aws_api_gateway_rest_api.file_api.root_resource_id
+  path_part   = "{proxy+}"
+}
+
+resource "aws_api_gateway_method" "proxy" {
+  rest_api_id   = aws_api_gateway_rest_api.file_api.id
+  resource_id   = aws_api_gateway_resource.proxy.id
+  http_method   = "ANY"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "lambda" {
+  rest_api_id             = aws_api_gateway_rest_api.file_api.id
+  resource_id             = aws_api_gateway_method.proxy.resource_id
+  http_method             = aws_api_gateway_method.proxy.http_method
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.file_processor.invoke_arn
+}
+
+resource "aws_api_gateway_deployment" "deployment" {
+  depends_on  = [aws_api_gateway_integration.lambda]
+  rest_api_id = aws_api_gateway_rest_api.file_api.id
+}
+
+resource "aws_api_gateway_stage" "prod" {
+  stage_name    = "prod"
+  rest_api_id   = aws_api_gateway_rest_api.file_api.id
+  deployment_id = aws_api_gateway_deployment.deployment.id
+}
+
+resource "aws_cloudwatch_dashboard" "main" {
+  dashboard_name = "LambdaFileProcessor-Dashboard"
+
+  dashboard_body = jsonencode({
+    widgets = [
+      {
+        type = "metric",
+        x    = 0,
+        y    = 0,
+        width  = 12,
+        height = 6,
+        properties = {
+          metrics = [
+            [ "AWS/Lambda", "Invocations", "FunctionName", "s3-file-processor" ],
+            [ ".", "Errors", ".", "." ],
+            [ ".", "Throttles", ".", "." ]
+          ],
+          view     = "timeSeries",
+          stacked  = false,
+          region   = var.region,
+          title    = "Lambda Function: Invocations, Errors, Throttles",
+          period   = 300
+        }
+      },
+      {
+        type = "log",
+        x    = 0,
+        y    = 7,
+        width  = 24,
+        height = 6,
+        properties = {
+          query = "SOURCE '/aws/lambda/s3-file-processor'",
+          region = var.region,
+          title = "Recent Lambda Logs"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "ses_send_email" {
+  name = "ses-send-email"
+  role = aws_iam_role.lambda_exec.id
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [{
+      Effect   = "Allow",
+      Action   = "ses:SendEmail",
+      Resource = "*"
+    }]
+  })
+}
+
