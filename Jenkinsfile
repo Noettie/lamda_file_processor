@@ -115,6 +115,35 @@ pipeline {
                 }
             }
         }
+        
+        // --- New stages added below ---
+        
+        stage('Invoke Lambda') {
+            steps {
+                script {
+                    sh '''
+                        payload=$(base64 -w0 lambda/test_event.json)
+                        aws lambda invoke --function-name s3-file-processor --payload "$payload" lambda/response.json --region ${AWS_REGION}
+                    '''
+                    sh 'cat lambda/response.json'
+                }
+            }
+        }
+
+        stage('Update Lambda SNS Topic ARN') {
+            steps {
+                script {
+                    def snsTopicArn = sh(returnStdout: true, script: 'cd infra && terraform output -raw sns_topic_arn').trim()
+
+                    sh """
+                        aws lambda update-function-configuration \
+                          --function-name s3-file-processor \
+                          --environment Variables={SNS_TOPIC_ARN=${snsTopicArn}} \
+                          --region ${AWS_REGION}
+                    """
+                }
+            }
+        }
     }
 
     post {
@@ -129,7 +158,7 @@ pipeline {
         success {
             emailext(
                 subject: "✅ Lambda Deployment Successful: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                body: "The Lambda function and infrastructure were deployed successfully, API Gateway tested, and S3 upload trigger verified.",
+                body: "The Lambda function and infrastructure were deployed successfully, API Gateway tested, S3 upload trigger verified, and Lambda invoked.",
                 to: "thandonoe.ndlovu@gmail.com"
             )
         }
