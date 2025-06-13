@@ -25,6 +25,10 @@ data "aws_s3_bucket" "file_bucket" {
 resource "aws_iam_role" "lambda_exec" {
   name = "lambda-exec-role"
 
+  lifecycle {
+    prevent_destroy = true
+  }
+
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
