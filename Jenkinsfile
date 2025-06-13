@@ -196,22 +196,6 @@ pipeline {
             }
         }
 
-        stage('Update Lambda SNS Topic ARN') {
-            steps {
-                script {
-                    def snsTopicArn = sh(returnStdout: true, script: 'cd infra && terraform output -raw sns_topic_arn').trim()
-
-                    sh """
-                        aws lambda update-function-configuration \
-                          --function-name ${lambda_name} \
-                          --environment Variables={SNS_TOPIC_ARN=${snsTopicArn}} \
-                          --region ${AWS_REGION}
-                    """
-                }
-            }
-        }
-    }
-
     post {
         failure {
             dir('infra') {
