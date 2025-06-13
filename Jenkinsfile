@@ -5,21 +5,25 @@ pipeline {
             args '-u root -v /tmp:/tmp -e PIP_NO_CACHE_DIR=1'
         }
     }
+
     environment {
         AWS_ACCESS_KEY_ID     = credentials('AWS_ACCESS_KEY_ID')
         AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
         TF_IN_AUTOMATION      = 'true'
     }
+
     stages {
         stage('Checkout Code') {
-            steps { checkout scm }
+            steps {
+                checkout scm
+            }
         }
 
         stage('Install Tools') {
             steps {
                 sh '''
                     yum update -y --skip-broken
-                    yum install -y python3 python3-pip zip wget unzip
+                    yum install -y python3 python3-pip zip wget unzip curl
                     rm -rf /var/cache/yum
                 '''
             }
@@ -62,15 +66,57 @@ pipeline {
             }
         }
 
-        stage('Verify Deployment') {
+        stage('Test S3 Upload') {
+            steps {
+                script {
+                    def bucket = sh(
+                        script: 'cd infra && terraform output -raw file_bucket',
+                        returnStdout: true
+                    ).trim()
+
+                    echo "Uploading test file to S3 bucket: ${bucket}"
+                    sh """
+                        echo 'test file content' > /tmp/test-upload.txt
+                        aws s3 cp /tmp/test-upload.txt s3://${bucket}/lambda/test-upload.txt
+                    """
+                }
+            }
+        }
+
+        stage('Test API Gateway') {
             steps {
                 script {
                     def api_url = sh(
                         script: 'cd infra && terraform output -raw api_url',
                         returnStdout: true
                     ).trim()
+
                     echo "API Endpoint: ${api_url}"
-                    sh "curl -s ${api_url}"
+
+                    def testPayload = '''{
+                      "Records": [
+                        {
+                          "s3": {
+                            "bucket": { "name": "dummy-bucket" },
+                            "object": { "key": "dummy-key" }
+                          },
+                          "eventTime": "2024-01-01T00:00:00.000Z"
+                        }
+                      ]
+                    }'''
+
+                    writeFile file: 'test_event.json', text: testPayload
+
+                    sh """
+                        echo "Sending test event to API Gateway..."
+                        response=$(curl -s -o response.txt -w "%{http_code}" -X POST -H "Content-Type: application/json" -d @test_event.json ${api_url})
+                        echo "Response Code: \$response"
+                        cat response.txt
+                        if [ "\$response" -ne 200 ]; then
+                            echo "API Gateway test failed"
+                            exit 1
+                        fi
+                    """
                 }
             }
         }
@@ -80,19 +126,15 @@ pipeline {
         success {
             emailext(
                 subject: "✅ Lambda Deployment Successful: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                body: "The Lambda function and infrastructure were deployed successfully.",
-                to: "thandonoe.ndlovu@gmail.com",
-                recipientProviders: [[$class: 'DevelopersRecipientProvider'], [$class: 'RequesterRecipientProvider']],
-                replyTo: 'no-reply@example.com'
+                body: "Lambda function deployed and tested successfully via both S3 and API Gateway.",
+                to: "thandonoe.ndlovu@gmail.com"
             )
         }
 
         failure {
-            emailext(
-                subject: "❌ Lambda Deployment Failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                body: "Deployment failed. Please check the logs.",
-                to: "thandonoe.ndlovu@gmail.com"
-            )
+            dir('infra') {
+                sh 'terraform destroy -auto-approve'
+            }
         }
 
         cleanup {
@@ -100,5 +142,4 @@ pipeline {
         }
     }
 }
-
 

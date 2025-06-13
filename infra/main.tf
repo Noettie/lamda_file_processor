@@ -265,6 +265,4 @@ variable "region" {
   default = "us-east-1"
 }
 
-output "api_url" {
-  value = "https://${aws_api_gateway_rest_api.file_api.id}.execute-api.us-east-1.amazonaws.com/prod/"
-}
+
