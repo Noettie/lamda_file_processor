@@ -26,6 +26,21 @@ def lambda_handler(event, context):
     }
 
     try:
+        # Check if this is an API Gateway event (has httpMethod key)
+        if 'httpMethod' in event:
+            logger.info("API Gateway event received.")
+            # You can process the event['body'] or other info here if needed
+            body = event.get('body')
+            return {
+                'statusCode': 200,
+                'body': json.dumps({
+                    'message': 'API Gateway call received',
+                    'received_body': body
+                }),
+                'headers': headers
+            }
+
+        # Otherwise, assume this is an S3 event notification
         audit_log = {
             "event_time": datetime.utcnow().isoformat(),
             "aws_request_id": context.aws_request_id,
@@ -33,6 +48,11 @@ def lambda_handler(event, context):
         }
 
         for record in event.get('Records', []):
+            # Defensive check that 's3' key exists (in case non-S3 event slips in)
+            if 's3' not in record:
+                logger.warning("Record without 's3' key encountered, skipping: " + json.dumps(record))
+                continue
+
             file_info = {
                 "bucket": record['s3']['bucket']['name'],
                 "key": record['s3']['object']['key'],
@@ -46,7 +66,7 @@ def lambda_handler(event, context):
                 **file_info
             }))
 
-            # Send notification
+            # Send notification if SNS topic ARN provided
             if SNS_TOPIC_ARN:
                 sns_response = sns.publish(
                     TopicArn=SNS_TOPIC_ARN,
@@ -79,3 +99,4 @@ def lambda_handler(event, context):
             'body': json.dumps({"error": "File processing failed"}),
             'headers': headers
         }
+
