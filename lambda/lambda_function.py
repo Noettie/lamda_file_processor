@@ -4,10 +4,12 @@ import json
 import logging
 import traceback
 from datetime import datetime
+import urllib.parse
 
 # Initialize clients
 s3 = boto3.client('s3')
 sns = boto3.client('sns')
+ses = boto3.client('ses')  # Add SES client
 
 # Configure logging
 logger = logging.getLogger()
@@ -16,6 +18,8 @@ logger.setLevel(logging.INFO)
 # Environment variables
 SNS_TOPIC_ARN = os.getenv('SNS_TOPIC_ARN')
 ALLOWED_ORIGIN = os.getenv('ALLOWED_ORIGIN', '*')
+SES_SENDER = os.getenv('SES_SENDER_EMAIL')       # e.g. noreply@yourdomain.com
+SES_RECIPIENT = os.getenv('SES_RECIPIENT_EMAIL') # e.g. you@example.com
 
 def lambda_handler(event, context):
     headers = {
@@ -24,7 +28,7 @@ def lambda_handler(event, context):
         'Access-Control-Allow-Methods': 'POST,OPTIONS',
         'Content-Type': 'application/json'
     }
-    
+
     try:
         audit_log = {
             "event_time": datetime.utcnow().isoformat(),
@@ -33,20 +37,25 @@ def lambda_handler(event, context):
         }
 
         for record in event.get('Records', []):
+            bucket = record['s3']['bucket']['name']
+            key = urllib.parse.unquote_plus(record['s3']['object']['key'])
+            size = record['s3']['object'].get('size', 'unknown')
+            event_time = record['eventTime']
+
             file_info = {
-                "bucket": record['s3']['bucket']['name'],
-                "key": record['s3']['object']['key'],
-                "size": record['s3']['object'].get('size', 'unknown'),
-                "event_time": record['eventTime']
+                "bucket": bucket,
+                "key": key,
+                "size": size,
+                "event_time": event_time
             }
-            
+
             # Log file receipt
             logger.info(json.dumps({
                 "action": "file_received",
                 **file_info
             }))
-            
-            # Send notification
+
+            # Send SNS notification
             if SNS_TOPIC_ARN:
                 sns_response = sns.publish(
                     TopicArn=SNS_TOPIC_ARN,
@@ -57,7 +66,37 @@ def lambda_handler(event, context):
                     "action": "notification_sent",
                     "sns_message_id": sns_response['MessageId']
                 }))
-            
+
+            # Send custom email via SES
+            if SES_SENDER and SES_RECIPIENT:
+                subject = "🚀 New File Uploaded to S3"
+                body = f"""
+Hello,
+
+A new file was uploaded to your S3 bucket.
+
+🗂️ Bucket: {bucket}
+📄 File: {key}
+📦 Size: {size} bytes
+🕒 Time: {event_time}
+
+Best regards,  
+Your Automation System
+"""
+                ses.send_email(
+                    Source=SES_SENDER,
+                    Destination={'ToAddresses': [SES_RECIPIENT]},
+                    Message={
+                        'Subject': {'Data': subject},
+                        'Body': {'Text': {'Data': body}}
+                    }
+                )
+                logger.info(json.dumps({
+                    "action": "email_sent",
+                    "to": SES_RECIPIENT,
+                    "subject": subject
+                }))
+
             audit_log["processed_files"].append(file_info)
 
         return {
@@ -73,9 +112,10 @@ def lambda_handler(event, context):
             "event": event
         }
         logger.error(json.dumps(error_log))
-        
+
         return {
             'statusCode': 500,
             'body': json.dumps({"error": "File processing failed"}),
             'headers': headers
         }
+

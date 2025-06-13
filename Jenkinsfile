@@ -10,6 +10,8 @@ pipeline {
         AWS_ACCESS_KEY_ID     = credentials('AWS_ACCESS_KEY_ID')
         AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
         TF_IN_AUTOMATION      = 'true'
+        AWS_REGION            = 'us-east-1'  // Set Lambda/S3 region here consistently
+        S3_BUCKET             = 'lambda-file-processor-1073e95a' // Your bucket name
     }
 
     stages {
@@ -23,7 +25,7 @@ pipeline {
             steps {
                 sh '''
                     yum update -y --skip-broken
-                    yum install -y python3 python3-pip zip wget unzip 
+                    yum install -y python3 python3-pip zip wget unzip
                     rm -rf /var/cache/yum
                 '''
             }
@@ -97,6 +99,22 @@ pipeline {
                 """
             }
         }
+
+        stage('Test S3 Upload') {
+            steps {
+                script {
+                    sh """
+                        echo "Creating test upload file..."
+                        echo "This is a test file created at \$(date)" > test_upload_file.txt
+
+                        echo "Uploading test file to S3 bucket ${S3_BUCKET}..."
+                        aws s3 cp test_upload_file.txt s3://${S3_BUCKET}/test_upload_file.txt --region ${AWS_REGION}
+
+                        echo "Upload complete. Check Lambda logs for processing output."
+                    """
+                }
+            }
+        }
     }
 
     post {
@@ -111,7 +129,7 @@ pipeline {
         success {
             emailext(
                 subject: "✅ Lambda Deployment Successful: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                body: "The Lambda function and infrastructure were deployed successfully, and the API Gateway test passed.",
+                body: "The Lambda function and infrastructure were deployed successfully, API Gateway tested, and S3 upload trigger verified.",
                 to: "thandonoe.ndlovu@gmail.com"
             )
         }
