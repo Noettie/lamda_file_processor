@@ -23,7 +23,7 @@ pipeline {
             steps {
                 sh '''
                     yum update -y --skip-broken
-                    yum install -y python3 python3-pip zip wget unzip curl
+                    yum install -y python3 python3-pip zip wget unzip 
                     rm -rf /var/cache/yum
                 '''
             }
