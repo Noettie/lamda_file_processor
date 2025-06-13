@@ -72,7 +72,7 @@ pipeline {
             steps {
                 script {
                     def api_url = sh(
-                        script: 'cd infra && terraform output -raw api_url',
+                        script: 'cd infra && terraform output -raw api_gateway_url',
                         returnStdout: true
                     ).trim()
                     echo "API Endpoint: ${api_url}"
