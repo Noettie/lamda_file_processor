@@ -21,7 +21,20 @@ ALLOWED_ORIGIN = os.getenv('ALLOWED_ORIGIN', '*')
 SES_SENDER = os.getenv('SES_SENDER_EMAIL')       # e.g. noreply@yourdomain.com
 SES_RECIPIENT = os.getenv('SES_RECIPIENT_EMAIL') # e.g. you@example.com
 
-def lambda_handler(event, context):
+def handle_api_gateway(event, context):
+    logger.info("Handling API Gateway event")
+    return {
+        'statusCode': 200,
+        'body': json.dumps({'message': '✅ API Gateway test successful'}),
+        'headers': {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
+            'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key',
+            'Access-Control-Allow-Methods': 'POST,OPTIONS'
+        }
+    }
+
+def handle_s3_event(event, context):
     headers = {
         'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
         'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key',
@@ -80,7 +93,7 @@ A new file was uploaded to your S3 bucket.
 📦 Size: {size} bytes
 🕒 Time: {event_time}
 
-Best regards,  
+Best regards,
 Your Automation System
 """
                 ses.send_email(
@@ -118,4 +131,10 @@ Your Automation System
             'body': json.dumps({"error": "File processing failed"}),
             'headers': headers
         }
+
+def lambda_handler(event, context):
+    if 'httpMethod' in event:
+        return handle_api_gateway(event, context)
+    else:
+        return handle_s3_event(event, context)
 
