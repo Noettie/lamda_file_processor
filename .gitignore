@@ -4,4 +4,7 @@
 .terraform/
 infra/.terraform.lock.hcl
 infra/terraform.tfstate.1749766187.backup
-
+*1
+Jenkinsfile1
+*1.*
+ 

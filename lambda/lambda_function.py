@@ -25,14 +25,6 @@ def lambda_handler(event, context):
         'Content-Type': 'application/json'
     }
 
-    # Handle API Gateway "test" requests or direct HTTP calls
-    if 'httpMethod' in event:
-        return {
-            'statusCode': 200,
-            'body': json.dumps({"message": "Lambda is reachable via API Gateway"}),
-            'headers': headers
-        }
-
     try:
         audit_log = {
             "event_time": datetime.utcnow().isoformat(),
@@ -87,4 +79,5 @@ def lambda_handler(event, context):
             'body': json.dumps({"error": "File processing failed"}),
             'headers': headers
         }
+
 
