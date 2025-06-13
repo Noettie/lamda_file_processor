@@ -123,7 +123,7 @@ pipeline {
                 script {
                     sh '''
                         payload=$(base64 -w0 lambda/test_event.json)
-                        aws lambda invoke --function-name s3-file-processor --payload "$payload" lambda/response.json --region ${AWS_REGION}
+                        aws lambda invoke --function-name ${lambda_name} --payload "$payload" lambda/response.json --region ${AWS_REGION}
                     '''
                     sh 'cat lambda/response.json'
                 }
@@ -137,7 +137,7 @@ pipeline {
 
                     sh """
                         aws lambda update-function-configuration \
-                          --function-name s3-file-processor \
+                          --function-name ${lambda_name} \
                           --environment Variables={SNS_TOPIC_ARN=${snsTopicArn}} \
                           --region ${AWS_REGION}
                     """
