@@ -25,7 +25,7 @@ pipeline {
             steps {
                 sh '''
                     yum update -y --skip-broken
-                    yum install -y python3 python3-pip zip wget unzip curl bind-utils less groff
+                    yum install -y python3 python3-pip zip wget unzip bind-utils less groff
                     
                     echo "Installing AWS CLI..."
                     curl https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o awscliv2.zip
