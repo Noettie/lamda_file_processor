@@ -133,7 +133,7 @@ resource "aws_sns_topic_subscription" "email" {
 # Lambda Function
 resource "aws_lambda_function" "file_processor" {
   filename      = "lambda.zip" # your zip file with the lambda code
-  function_name = "s3-file-processor"
+  function_name = "s3-file-processor-${random_id.suffix.hex}"
   role          = aws_iam_role.lambda_exec.arn
   handler       = "lambda_function.lambda_handler"
   runtime       = "python3.9"
