@@ -136,26 +136,20 @@ resource "aws_lambda_permission" "allow_s3" {
   source_arn    = data.aws_s3_bucket.file_bucket.arn
 }
 
-resource "aws_s3_bucket_notification" "lambda_event" {
+resource "aws_s3_bucket_notification" "combined" {
   bucket = data.aws_s3_bucket.file_bucket.id
 
   lambda_function {
     lambda_function_arn = aws_lambda_function.file_processor.arn
     events              = ["s3:ObjectCreated:*"]
-    filter_prefix       = "lambda/"
   }
-
-  depends_on = [aws_lambda_permission.allow_s3]
-}
-
-resource "aws_s3_bucket_notification" "sns_event" {
-  bucket = data.aws_s3_bucket.file_bucket.id
 
   topic {
     topic_arn     = aws_sns_topic.uploads_notifications.arn
     events        = ["s3:ObjectCreated:*"]
-    filter_prefix = "sns/"
   }
+
+  depends_on = [aws_lambda_permission.allow_s3]
 }
 
 resource "aws_api_gateway_rest_api" "file_api" {
