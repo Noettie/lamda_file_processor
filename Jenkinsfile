@@ -10,8 +10,8 @@ pipeline {
         AWS_ACCESS_KEY_ID     = credentials('AWS_ACCESS_KEY_ID')
         AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
         TF_IN_AUTOMATION      = 'true'
-        AWS_REGION            = 'us-east-1'  // Set Lambda/S3 region here consistently
-        S3_BUCKET             = 'lambda-file-processor-1073e95a' // Your bucket name
+        AWS_REGION            = 'us-east-1'
+        S3_BUCKET             = 'lambda-file-processor-1073e95a'
     }
 
     stages {
@@ -26,7 +26,7 @@ pipeline {
                 sh '''
                     yum update -y --skip-broken
                     yum install -y python3 python3-pip zip wget unzip bind-utils less groff
-                    
+
                     echo "Installing AWS CLI..."
                     curl https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o awscliv2.zip
                     unzip awscliv2.zip
@@ -82,7 +82,7 @@ pipeline {
                     ).trim()
                     echo "API Endpoint: ${api_url}"
                     env.DEPLOYED_API_URL = api_url
-                    sh "curl -s ${api_url}" // optional initial connectivity check
+                    sh "curl -s ${api_url}"
                 }
             }
         }
@@ -90,11 +90,8 @@ pipeline {
         stage('Test API Gateway') {
             steps {
                 script {
-                    // Read API URL from Terraform output
                     def api_url = sh(script: 'cd infra && terraform output -raw api_gateway_url', returnStdout: true).trim()
                     env.DEPLOYED_API_URL = api_url
-                    
-                    // Extract hostname for DNS check
                     def hostname = api_url.replaceAll('https?://', '').split('/')[0]
 
                     echo "Checking DNS resolution for: ${hostname}"
@@ -103,19 +100,13 @@ pipeline {
 
                     if (dnsCheck.contains("NXDOMAIN") || dnsCheck.toLowerCase().contains("can't find") || dnsCheck.toLowerCase().contains("no answer")) {
                         echo "⚠️ DNS resolution failed, invoking Lambda directly via AWS CLI"
-
-                        // Get Lambda function name from Terraform output
                         def lambda_name = sh(script: 'cd infra && terraform output -raw lambda_function_name', returnStdout: true).trim()
 
-                        // Write test event file (adjust as needed)
-                        writeFile file: 'test_event.json', text: '''
-                        {
+                        writeFile file: 'test_event.json', text: '''{
                             "httpMethod": "POST",
                             "body": "{\\"test\\": \\"payload\\"}"
-                        }
-                        '''
+                        }'''
 
-                        // Invoke Lambda directly
                         sh """
                             aws lambda invoke \
                                 --function-name ${lambda_name} \
@@ -129,7 +120,6 @@ pipeline {
                     } else {
                         echo "✅ DNS resolution successful, testing API Gateway endpoint"
 
-                        // Properly formatted S3 event for the Lambda trigger
                         def eventJson = '''{
                           "Records": [{
                             "eventVersion": "2.1",
@@ -195,6 +185,7 @@ pipeline {
                 }
             }
         }
+    }
 
     post {
         failure {
@@ -215,6 +206,3 @@ pipeline {
     }
 }
 
-    
-
-    
