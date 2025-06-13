@@ -145,7 +145,7 @@ resource "aws_sns_topic_subscription" "email" {
 
 resource "aws_lambda_function" "file_processor" {
   filename      = var.lambda_zip
-  function_name = "s3-file-processor-"s3-file-processor"
+  function_name = "s3-file-processor"
   role          = aws_iam_role.lambda_exec.arn
   handler       = "lambda_function.lambda_handler"
   runtime       = "python3.9"
