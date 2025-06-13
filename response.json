@@ -1,0 +1,1 @@
+{"statusCode": 200, "body": "{\"event_time\": \"2025-06-13T06:46:25.535509\", \"aws_request_id\": \"b827fac9-0119-4438-9c9e-36159b6f43fa\", \"processed_files\": []}", "headers": {"Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Content-Type,X-Amz-Date,Authorization,X-Api-Key", "Access-Control-Allow-Methods": "POST,OPTIONS", "Content-Type": "application/json"}}
