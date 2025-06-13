@@ -106,12 +106,6 @@ resource "aws_sns_topic" "uploads_notifications" {
   })
 }
 
-resource "aws_sns_topic_subscription" "email" {
-  topic_arn = aws_sns_topic.uploads_notifications.arn
-  protocol  = "email"
-  endpoint  = var.ses_recipient_email
-}
-
 resource "aws_lambda_function" "file_processor" {
   filename      = var.lambda_zip
   function_name = "s3-file-processor"
