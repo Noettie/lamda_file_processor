@@ -7,16 +7,6 @@ terraform {
   }
 }
 
-terraform {
-  backend "s3" {
-    bucket         = "petra-hs-terraform-state-bucket"
-    key            = "terraform.tfstate"
-    region         = "us-east-1"
-    dynamodb_table = "terraform-lock-table"
-    encrypt        = true
-  }
-}
-
 provider "aws" {
   region = "us-east-1"
 }
@@ -62,7 +52,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "auto_cleanup" {
 
 # IAM Role for Lambda
 resource "aws_iam_role" "lambda_exec" {
-  name = "lambda-exec-role-${random_id.suffix.hex}"
+  name = "lambda-exec-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -278,5 +268,3 @@ variable "region" {
 output "api_url" {
   value = "https://${aws_api_gateway_rest_api.file_api.id}.execute-api.us-east-1.amazonaws.com/prod/"
 }
-
-
