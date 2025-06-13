@@ -19,33 +19,7 @@ resource "random_id" "suffix" {
 
 data "aws_s3_bucket" "file_bucket" {
   bucket = "lambda-file-processor-1073e95a"
-}
 
-resource "aws_s3_bucket_server_side_encryption_configuration" "encrypt" {
-  bucket = data.aws_s3_bucket.file_bucket.id
-
-  rule {
-    apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
-    }
-  }
-}
-
-resource "aws_s3_bucket_lifecycle_configuration" "auto_cleanup" {
-  bucket = data.aws_s3_bucket.file_bucket.id
-
-  rule {
-    id     = "delete-old-files"
-    status = "Enabled"
-
-    filter {
-      prefix = ""
-    }
-
-    expiration {
-      days = 30
-    }
-  }
 }
 
 resource "aws_iam_role" "lambda_exec" {
@@ -106,8 +80,8 @@ resource "aws_iam_role_policy" "ses_access" {
   policy = jsonencode({
     Version = "2012-10-17",
     Statement = [{
-      Effect   = "Allow",
-      Action   = [
+      Effect = "Allow",
+      Action = [
         "ses:SendEmail",
         "ses:SendRawEmail"
       ],
@@ -126,7 +100,7 @@ resource "aws_sns_topic" "uploads_notifications" {
       Principal = {
         Service = "s3.amazonaws.com"
       }
-      Action = "SNS:Publish"
+      Action   = "SNS:Publish"
       Resource = "arn:aws:sns:${var.region}:${data.aws_caller_identity.current.account_id}:s3-file-upload-notifications"
       Condition = {
         ArnLike = {
@@ -189,8 +163,8 @@ resource "aws_s3_bucket_notification" "sns_event" {
   bucket = data.aws_s3_bucket.file_bucket.id
 
   topic {
-    topic_arn    = aws_sns_topic.uploads_notifications.arn
-    events       = ["s3:ObjectCreated:*"]
+    topic_arn     = aws_sns_topic.uploads_notifications.arn
+    events        = ["s3:ObjectCreated:*"]
     filter_prefix = "sns/"
   }
 }
@@ -198,7 +172,7 @@ resource "aws_s3_bucket_notification" "sns_event" {
 resource "aws_api_gateway_rest_api" "file_api" {
   name = "file-processor-api"
 
- lifecycle {
+  lifecycle {
     prevent_destroy = true
   }
 }
@@ -242,34 +216,34 @@ resource "aws_cloudwatch_dashboard" "main" {
   dashboard_body = jsonencode({
     widgets = [
       {
-        type = "metric",
-        x    = 0,
-        y    = 0,
+        type   = "metric",
+        x      = 0,
+        y      = 0,
         width  = 12,
         height = 6,
         properties = {
           metrics = [
-            [ "AWS/Lambda", "Invocations", "FunctionName", "s3-file-processor" ],
-            [ ".", "Errors", ".", "." ],
-            [ ".", "Throttles", ".", "." ]
+            ["AWS/Lambda", "Invocations", "FunctionName", "s3-file-processor"],
+            [".", "Errors", ".", "."],
+            [".", "Throttles", ".", "."]
           ],
-          view     = "timeSeries",
-          stacked  = false,
-          region   = var.region,
-          title    = "Lambda Function: Invocations, Errors, Throttles",
-          period   = 300
+          view    = "timeSeries",
+          stacked = false,
+          region  = var.region,
+          title   = "Lambda Function: Invocations, Errors, Throttles",
+          period  = 300
         }
       },
       {
-        type = "log",
-        x    = 0,
-        y    = 7,
+        type   = "log",
+        x      = 0,
+        y      = 7,
         width  = 24,
         height = 6,
         properties = {
-          query = "SOURCE '/aws/lambda/s3-file-processor'",
+          query  = "SOURCE '/aws/lambda/s3-file-processor'",
           region = var.region,
-          title = "Recent Lambda Logs"
+          title  = "Recent Lambda Logs"
         }
       }
     ]

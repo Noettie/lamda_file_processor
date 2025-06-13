@@ -20,12 +20,12 @@ variable "notification_email" {
 
 variable "ses_sender_email" {
   description = "Sender email address for SES"
-  default     = "nottienoe.ndlovu@gmail.com"  # Replace with your verified SES sender email
+  default     = "nottienoe.ndlovu@gmail.com" # Replace with your verified SES sender email
 }
 
 variable "ses_recipient_email" {
   description = "Recipient email address for SES"
-  default     = "nottienoe.ndlovu@gmail.com"  # Replace with your recipient email
+  default     = "nottienoe.ndlovu@gmail.com" # Replace with your recipient email
 }
 
 variable "allowed_origin" {
