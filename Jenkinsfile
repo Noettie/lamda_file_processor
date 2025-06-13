@@ -200,7 +200,7 @@ pipeline {
             emailext(
                 subject: "✅ Lambda Deployment Successful: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
                 body: "The Lambda function and infrastructure were deployed successfully, API Gateway tested, S3 upload trigger verified, and Lambda invoked.",
-                to: "thandonoe.ndlovu@gmail.com"
+                to: "nottienoe.ndlovu@gmail.com"
             )
         }
     }
