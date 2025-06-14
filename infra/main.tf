@@ -87,23 +87,6 @@ resource "aws_iam_role_policy" "ses_access" {
 
 resource "aws_sns_topic" "uploads_notifications" {
   name = "s3-file-upload-notifications"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Principal = {
-        Service = "s3.amazonaws.com"
-      }
-      Action   = "SNS:Publish"
-      Resource = "arn:aws:sns:${var.region}:${data.aws_caller_identity.current.account_id}:s3-file-upload-notifications"
-      Condition = {
-        ArnLike = {
-          "aws:SourceArn" = data.aws_s3_bucket.file_bucket.arn
-        }
-      }
-    }]
-  })
 }
 
 resource "aws_lambda_function" "file_processor" {
@@ -142,14 +125,9 @@ resource "aws_s3_bucket_notification" "combined" {
   lambda_function {
     lambda_function_arn = aws_lambda_function.file_processor.arn
     events              = ["s3:ObjectCreated:*"]
-  }
-
-  topic {
-    topic_arn     = aws_sns_topic.uploads_notifications.arn
-    events        = ["s3:ObjectCreated:*"]
-  }
-
-  depends_on = [aws_lambda_permission.allow_s3]
+ }
+ 
+ depends_on = [aws_lambda_permission.allow_s3]
 }
 
 resource "aws_api_gateway_rest_api" "file_api" {
