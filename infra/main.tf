@@ -211,17 +211,3 @@ resource "aws_cloudwatch_dashboard" "main" {
   })
 }
 
-resource "aws_iam_role_policy" "ses_send_email" {
-  name = "ses-send-email"
-  role = aws_iam_role.lambda_exec.id
-
-  policy = jsonencode({
-    Version = "2012-10-17",
-    Statement = [{
-      Effect   = "Allow",
-      Action   = "ses:SendEmail",
-      Resource = "*"
-    }]
-  })
-}
-
